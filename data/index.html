@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Tank Telemetry</title>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+  <h1>Telemetry Dashboard</h1>
+  <p id="imuData">IMU: Waiting...</p>
+  <p id="gpsData">GPS: Waiting...</p>
+  <div id="map" style="height: 300px;"></div>
+  <textarea id="serialBox" style="width:100%; height:200px;" readonly></textarea><br>
+  <button onclick="toggleAutoscroll()">Toggle Autoscroll</button>
+
+  <script>
+    let autoScroll = true;
+    const socket = new WebSocket("ws://" + location.hostname + "/ws");
+
+    socket.onmessage = function (event) {
+      document.getElementById("serialBox").value += event.data + "\\n";
+      if (autoScroll) {
+        const box = document.getElementById("serialBox");
+        box.scrollTop = box.scrollHeight;
+      }
+    };
+
+    function toggleAutoscroll() {
+      autoScroll = !autoScroll;
+    }
+  </script>
+</body>
+</html>

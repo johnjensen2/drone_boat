@@ -167,8 +167,7 @@ void setup() {
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
 
-  // Start the server
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+ server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     String html = "<html><head>";
     html += "<link rel='stylesheet' href='https://unpkg.com/leaflet/dist/leaflet.css' />";
     html += "<script src='https://unpkg.com/leaflet/dist/leaflet.js'></script>";
@@ -177,17 +176,12 @@ void setup() {
     
     // Display IMU and GPS data
     html += "<p>IMU Data: " + getIMUData() + "</p>";
-    html += "<p>GPS Data: Latitude: " + String(currentLat, 6) + ", Longitude: " + String(currentLon, 6) + "</p>";
+    html += "<p>GPS Data: " + getGPSData() + "</p>";
     html += "<p>Battery Voltage: " + String(readBatteryVoltage(), 2) + " V</p>";
 
     // Leaflet Map
     html += "<div id='map' style='width: 100%; height: 400px;'></div>";
-
-    // Serial Data Display Box
-    html += "<h3>Serial Data</h3>";
-    html += "<textarea id='serialBox' style='width:100%; height:200px;' readonly></textarea><br>";
-    html += "<button onclick='toggleAutoscroll()'>Toggle Autoscroll</button>";
-
+    
     // JavaScript for setting up the map and GPS coordinates
     html += "<script>";
     html += "var map = L.map('map').setView([0, 0], 13);"; // Default center
@@ -196,20 +190,20 @@ void setup() {
     html += "}).addTo(map);";
     html += "var marker = L.marker([0, 0]).addTo(map);"; // Default marker
 
-    // Update GPS coordinates dynamically from ESP32
+    // Update GPS coordinates (replace with actual data)
     html += "function updateLocation(lat, lon) {";
     html += "    marker.setLatLng([lat, lon]);";
     html += "    map.setView([lat, lon], 13);"; // Update map view to new coordinates
     html += "}";
 
-    // Call updateLocation with your GPS data
-    html += "updateLocation(" + String(currentLat, 6) + ", " + String(currentLon, 6) + ");"; // Real GPS data
+    // Call updateLocation with your GPS data (replace with real data)
+    html += "updateLocation(" + String(currentLat) + ", " + String(currentLon) + ");"; // Placeholder GPS data
 
-    
     html += "</script>";
     html += "</body></html>";
     request->send(200, "text/html", html);
-  });
+});
+
   // Start the webserial server
   // WebSerial is accessible at "<IP Address>/webserial" in browser
   WebSerial.begin(&server);
