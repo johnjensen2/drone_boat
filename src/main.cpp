@@ -56,14 +56,14 @@ void drive(int leftSpeed, int rightSpeed) {
 
 // =================== Sensor Reading ===================
 String getIMUData() {
-  mpu.getMotion6();
-  int ax = mpu.getAccelerationX();
-  int ay = mpu.getAccelerationY();
-  int az = mpu.getAccelerationZ();
-  int gx = mpu.getRotationX();
-  int gy = mpu.getRotationY();
-  int gz = mpu.getRotationZ();
-
+  // Declare variables for sensor data
+  int16_t ax, ay, az;
+  int16_t gx, gy, gz;
+  
+  // Get the raw sensor data
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  
+  // Return the data as a formatted string
   return "IMU:AX=" + String(ax) + " AY=" + String(ay) + " AZ=" + String(az) +
          " GX=" + String(gx) + " GY=" + String(gy) + " GZ=" + String(gz);
 }
