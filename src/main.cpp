@@ -5,13 +5,14 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoOTA.h>
+#include <WebSerial.h>
 
 // =================== Wi-Fi Setup ===================
 const char* ssid = "homesweethome";
 const char* password = "johnandamy";
 
 AsyncWebServer server(80);
-
+AsyncWebSocket ws("/ws");
 
 
 // =================== Pin Config ===================
@@ -32,7 +33,12 @@ HardwareSerial gpsSerial(1);
 // =================== Globals ===================
 unsigned long lastTelemetryTime = 0;
 int telemetryInterval = 1000;
-
+// Variables for GPS data
+double currentLat = 29.676096;
+double currentLon = -98.057546;
+// Serial data variable
+String serialData = "";
+bool autoScroll = true;  // Autoscroll toggle
 
 // =================== Motor Control ===================
 void setMotor(int pwmPin, int dirPin, int speed) {
@@ -43,6 +49,19 @@ void setMotor(int pwmPin, int dirPin, int speed) {
 void drive(int leftSpeed, int rightSpeed) {
   setMotor(motorLeftPWM, motorLeftDir, leftSpeed);
   setMotor(motorRightPWM, motorRightDir, rightSpeed);
+}
+
+// =================== WebSocket event handler ===================
+void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  if (type == WS_EVT_CONNECT) {
+    Serial.println("WebSocket client connected");
+  } else if (type == WS_EVT_DISCONNECT) {
+    Serial.println("WebSocket client disconnected");
+  } else if (type == WS_EVT_DATA) {
+    // Handle incoming data (if needed)
+    String message = String((char*)data);
+    Serial.println("Received message: " + message);
+  }
 }
 
 // =================== Sensor Reading ===================
@@ -74,8 +93,9 @@ String getGPSData() {
 float readBatteryVoltage() {
   return analogRead(batteryPin) * (3.3 / 4095.0) * 2; // Adjust if using voltage divider
 }
+// =================== WebSerial Setup ===================
 
-
+unsigned long last_print_time = millis();
 // =================== Setup ===================
 void setup() {
   Serial.begin(115200);
@@ -143,18 +163,72 @@ void setup() {
 
   // Initialize the web server
 
+  // Setup WebSocket
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
+
   // Start the server
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    String html = "<html><body><h1>Telemetry Dashboard Wifi upload</h1>";
+    String html = "<html><head>";
+    html += "<link rel='stylesheet' href='https://unpkg.com/leaflet/dist/leaflet.css' />";
+    html += "<script src='https://unpkg.com/leaflet/dist/leaflet.js'></script>";
+    html += "</head><body>";
+    html += "<h1>Telemetry Dashboard</h1>";
+    
+    // Display IMU and GPS data
     html += "<p>IMU Data: " + getIMUData() + "</p>";
-    html += "<p>GPS Data: " + getGPSData() + "</p>";
+    html += "<p>GPS Data: Latitude: " + String(currentLat, 6) + ", Longitude: " + String(currentLon, 6) + "</p>";
     html += "<p>Battery Voltage: " + String(readBatteryVoltage(), 2) + " V</p>";
+
+    // Leaflet Map
+    html += "<div id='map' style='width: 100%; height: 400px;'></div>";
+
+    // Serial Data Display Box
+    html += "<h3>Serial Data</h3>";
+    html += "<textarea id='serialBox' style='width:100%; height:200px;' readonly></textarea><br>";
+    html += "<button onclick='toggleAutoscroll()'>Toggle Autoscroll</button>";
+
+    // JavaScript for setting up the map and GPS coordinates
+    html += "<script>";
+    html += "var map = L.map('map').setView([0, 0], 13);"; // Default center
+    html += "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {";
+    html += "    attribution: '© OpenStreetMap contributors'";
+    html += "}).addTo(map);";
+    html += "var marker = L.marker([0, 0]).addTo(map);"; // Default marker
+
+    // Update GPS coordinates dynamically from ESP32
+    html += "function updateLocation(lat, lon) {";
+    html += "    marker.setLatLng([lat, lon]);";
+    html += "    map.setView([lat, lon], 13);"; // Update map view to new coordinates
+    html += "}";
+
+    // Call updateLocation with your GPS data
+    html += "updateLocation(" + String(currentLat, 6) + ", " + String(currentLon, 6) + ");"; // Real GPS data
+
+    
+    html += "</script>";
     html += "</body></html>";
     request->send(200, "text/html", html);
   });
+  // Start the webserial server
+  // WebSerial is accessible at "<IP Address>/webserial" in browser
+  WebSerial.begin(&server);
 
+  /* Attach Message Callback */
+  WebSerial.onMessage([&](uint8_t *data, size_t len) {
+    Serial.printf("Received %u bytes from WebSerial: ", len);
+    Serial.write(data, len);
+    Serial.println();
+    WebSerial.println("Received Data...");
+    String d = "";
+    for(size_t i=0; i < len; i++){
+      d += char(data[i]);
+    }
+    WebSerial.println(d);
+  });
+
+  // Start the server
   server.begin();
-
 
   Serial.println("System Ready.");
 }
@@ -165,7 +239,14 @@ void loop() {
   //This is needed for OTA updates
   ArduinoOTA.handle();
 
-
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+    if (gps.location.isUpdated()) {
+      // Update the GPS coordinates when available
+      currentLat = gps.location.lat();
+      currentLon = gps.location.lng();
+    }
+  }
   if (millis() - lastTelemetryTime > telemetryInterval) {
     lastTelemetryTime = millis();
 
@@ -174,9 +255,23 @@ void loop() {
     Serial.println("Battery: " + String(readBatteryVoltage(), 2) + " V");
   }
 
-  // Example drive (test): slow forward
-  drive(100, 100);
-  delay(1000);
-  drive(0, 0);
-  delay(1000);
+// =================== this works but i need to edit the liberay page ===================
+// Print every 2 seconds (non-blocking)
+/*   if ((unsigned long)(millis() - last_print_time) > 2000) {
+    WebSerial.print(F("IP address: "));
+    WebSerial.println(WiFi.localIP());
+    WebSerial.printf("Uptime: %lums\n", millis());
+    #if defined(ESP8266)
+      WebSerial.printf("Free heap: %" PRIu32 "\n", ESP.getFreeHeap());
+    #elif defined(ESP32)
+      WebSerial.printf("Free heap: %" PRIu32 "\n", ESP.getFreeHeap());
+    #elif defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350)
+      WebSerial.printf("Free heap: %" PRIu32 "\n", rp2040.getFreeHeap());
+    #endif
+    last_print_time = millis();
+  } */
+
+  WebSerial.loop();
+ 
+  // Web server will run in the background
 }
