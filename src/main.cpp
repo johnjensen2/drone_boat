@@ -136,7 +136,7 @@ void setup() {
   });
 
    // Set OTA password (optional for security)
-  ArduinoOTA.setPassword("12345678");
+ // ArduinoOTA.setPassword("12345678");
 
   // Start OTA
   ArduinoOTA.begin();
@@ -145,7 +145,7 @@ void setup() {
 
   // Start the server
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    String html = "<html><body><h1>Telemetry Dashboard</h1>";
+    String html = "<html><body><h1>Telemetry Dashboard Wifi upload</h1>";
     html += "<p>IMU Data: " + getIMUData() + "</p>";
     html += "<p>GPS Data: " + getGPSData() + "</p>";
     html += "<p>Battery Voltage: " + String(readBatteryVoltage(), 2) + " V</p>";
